@@ -3,7 +3,7 @@ message: "If you use this code, please cite the paper and this software."
 title: "When 100% Accuracy Is a Warning Sign: analysis code for a condition-blocked audit of ML leak detection"
 type: software
 version: 1.0.0
-date-released: 2026-11-13
+date-released: 2026-11-14
 license: MIT
 repository-code: "https://github.com/issahnazif-afk/100-percent-warning-sign"
 keywords:
