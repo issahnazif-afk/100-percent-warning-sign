@@ -1,0 +1,19 @@
+# Data is not distributed with this repository
+data/
+Dynamic_pressure/
+*.xlsx
+*.xls
+
+# Script outputs written next to the data
+Corrected_Results/
+Paper1_Revision_Results/
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Results and figures are produced locally and not tracked; the paper is the reference
+results/
+Paper1_Revision_Results/
+Paper1_Figures/
