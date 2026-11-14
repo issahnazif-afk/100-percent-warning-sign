@@ -1,10 +1,14 @@
 # When 100% Accuracy Is a Warning Sign
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24218225.svg)](https://doi.org/10.5281/zenodo.24218225)
+
 Analysis code for **"Evaluating Near-Perfect Accuracy Claims in Machine-Learning-Based Leak Detection for Two-Phase Pipelines: A Condition-Blocked Audit"**.
 
 Authors: I. N. Suleiman, S. Serpoosh, N. Elkholy, H. Ferroudji, M. A. Rahman, M. Hamilton.
 
 **Paper:** arXiv link to be added.
+
+**Code DOI:** [10.5281/zenodo.24218225](https://doi.org/10.5281/zenodo.24218225) (all versions; v1.0.0 is [10.5281/zenodo.24218226](https://doi.org/10.5281/zenodo.24218226)).
 
 The paper is the reference for every reported number. This repository holds only the code used to produce them. Running the scripts on the data writes the results and figures locally; none are stored here.
 
