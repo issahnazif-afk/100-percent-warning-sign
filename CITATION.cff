@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the paper and this software."
+title: "When 100% Accuracy Is a Warning Sign: analysis code for a condition-blocked audit of ML leak detection"
+type: software
+version: 1.0.0
+date-released: 2026-11-13
+license: MIT
+repository-code: "https://github.com/issahnazif-afk/100-percent-warning-sign"
+keywords:
+  - condition-blocked validation
+  - leave-one-condition-out
+  - evaluation bias
+  - multiphase flow
+  - leak detection
+  - process safety
+authors:
+  - given-names: Issah N.
+    family-names: Suleiman
+    affiliation: Memorial University of Newfoundland
+  - given-names: Sormeh
+    family-names: Serpoosh
+    affiliation: Memorial University of Newfoundland
+  - given-names: Nadine
+    family-names: Elkholy
+    affiliation: Hamad Bin Khalifa University
+  - given-names: Hicham
+    family-names: Ferroudji
+    affiliation: University M'Hamed Bougara of Boumerdes
+  - given-names: Mohammad Azizur
+    family-names: Rahman
+    affiliation: Hamad Bin Khalifa University
+  - given-names: Matthew
+    family-names: Hamilton
+    affiliation: Memorial University of Newfoundland
+preferred-citation:
+  type: article
+  title: "Evaluating Near-Perfect Accuracy Claims in Machine-Learning-Based Leak Detection for Two-Phase Pipelines: A Condition-Blocked Audit"
+  year: 2026
+  authors:
+    - given-names: Issah N.
+      family-names: Suleiman
+    - given-names: Sormeh
+      family-names: Serpoosh
+    - given-names: Nadine
+      family-names: Elkholy
+    - given-names: Hicham
+      family-names: Ferroudji
+    - given-names: Mohammad Azizur
+      family-names: Rahman
+    - given-names: Matthew
+      family-names: Hamilton

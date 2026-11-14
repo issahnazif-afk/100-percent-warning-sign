@@ -44,14 +44,14 @@ try:
     HAS_SK = True
 except ImportError:
     HAS_SK = False
-    print("[WARNING] scikit-learn not found — Fig 2 will use estimated matrix")
+    print("[WARNING] scikit-learn not found — Fig 2 (confusion matrix) cannot be drawn")
 
 try:
     from catboost import CatBoostClassifier
     HAS_CB = True
 except ImportError:
     HAS_CB = False
-    print("[WARNING] CatBoost not found — Fig 2 will use estimated matrix")
+    print("[WARNING] CatBoost not found — Fig 2 (confusion matrix) cannot be drawn")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PATHS
@@ -108,32 +108,38 @@ CLASS_NAMES = ["No Leak\n(C0)", "Single-point\n(C1)", "Two-point/mult.\n(C2)"]
 # ─────────────────────────────────────────────────────────────────────────────
 print("  Generating Figure 1 — Protocol comparison ...")
 
-def load_csv_condition(csv_path):
-    """Return (acc_mean_list, acc_std_list) for Wk=6,8,10."""
-    df = pd.read_csv(csv_path)
+def need(name):
+    """Path to a required result file; stop if it is missing."""
+    p = RESULTS / name
+    if not p.exists():
+        sys.exit(f"ERROR: {p} not found. Run the experiment scripts first.")
+    return p
+
+def load_csv_condition(name):
+    """Return (acc_mean_list, acc_std_list) in % for Wk=6,8,10."""
+    df = pd.read_csv(need(name))
     means, stds = [], []
     for wk in WK:
         row = df[df.Wk == wk]
         if row.empty:
             means.append(np.nan); stds.append(np.nan)
         else:
-            means.append(float(row.iloc[0]["acc_mean"]) * 100)
-            stds.append(float(row.iloc[0].get("acc_std", 0)) * 100)
+            means.append(float(row.iloc[0]["accuracy_mean"]) * 100)
+            stds.append(float(row.iloc[0]["accuracy_std"]) * 100)
     return means, stds
 
-# Hard-coded verified values (from terminal output — these are the ground truth)
-DATA_FIG1 = {
-    "A":  {"means":[89.3,91.8,93.3],"stds":[1.0,0.9,0.7],"col":COL["A"],
-           "label":"A (time-based + $V_{SL}$/$V_{SG}$)"},
-    "B":  {"means":[62.1,61.7,62.6],"stds":[0.7,0.7,0.5],"col":COL["B"],
-           "label":"B (LOCO + $V_{SL}$/$V_{SG}$)"},
-    "C":  {"means":[55.4,56.0,59.1],"stds":[0.7,0.8,0.6],"col":COL["C"],
-           "label":"C ★ (LOCO, no $V_{SL}$/$V_{SG}$, 15 cond.)"},
-    "D":  {"means":[84.8,88.8,88.4],"stds":[1.2,0.6,0.9],"col":COL["D"],
-           "label":"D (time-based, no $V_{SL}$/$V_{SG}$)"},
-    "C9": {"means":[49.9,49.8,50.9],"stds":[0.3,0.8,0.5],"col":COL["C9"],
-           "label":"C-9 (LOCO, 9 cond., Alquennah design)"},
-}
+# All values are read from the result files written by the experiment scripts.
+_FIG1_SPEC = [
+    ("A",  "01_condition_A.csv",                   "A (time-based + $V_{SL}$/$V_{SG}$)"),
+    ("B",  "02_condition_B.csv",                   "B (LOCO + $V_{SL}$/$V_{SG}$)"),
+    ("C",  "03_condition_C_dual_9fold_PRIMARY.csv", "C ★ (LOCO, no $V_{SL}$/$V_{SG}$, 15 cond.)"),
+    ("D",  "04_condition_D.csv",                   "D (time-based, no $V_{SL}$/$V_{SG}$)"),
+    ("C9", "03_condition_C_9fold_sensitivity.csv",  "C-9 (LOCO, 9 cond., Alquennah design)"),
+]
+DATA_FIG1 = {}
+for key, fname, lbl in _FIG1_SPEC:
+    m, s = load_csv_condition(fname)
+    DATA_FIG1[key] = {"means": m, "stds": s, "col": COL[key], "label": lbl}
 
 x = np.arange(len(WK))
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
@@ -161,10 +167,10 @@ p1 = FIG_DIR / "Fig1_Protocol_Comparison.png"
 fig.savefig(p1, dpi=300, bbox_inches="tight")
 plt.close(fig)
 _a10 = DATA_FIG1['A']['means'][2]
-print(f"    Saved: {p1.name}  ✓  Condition A Wk=10 = {_a10}%")
+print(f"    Saved: {p1.name}  ✓  Condition A Wk=10 = {_a10:.1f}%")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FIG 2 — Confusion matrix (requires LOO pass OR estimated)
+# FIG 2 — Confusion matrix (one LOCO pass, seed 42)
 # ─────────────────────────────────────────────────────────────────────────────
 print("\n  Generating Figure 2 — Confusion matrix ...")
 
@@ -322,49 +328,20 @@ def try_compute_confusion_matrix():
     acc=accuracy_score(all_t,all_p)
     cm=confusion_matrix(all_t,all_p,labels=[0,1,2])
     cm_norm=(cm.astype(float)/cm.sum(axis=1,keepdims=True))
-    print(f"    Single-seed acc={acc*100:.1f}%  "
-          f"(mean across 10 seeds = 59.1%)")
+    print(f"    Single-seed (seed 42) acc={acc*100:.1f}%")
     return cm_norm
 
-def estimated_confusion_matrix():
-    """Construct an approximate normalised CM from aggregate metrics."""
-    # From verified results: F1_C0=0.708, F1_C1=0.566, F1_C2=0.503
-    # FAR=0.341 → recall_C0 = 1-FAR = 0.659
-    # MDR=0.102 → 10.2% of leak windows go to C0
-    # Assume equal class sizes; split FAR equally between C1 and C2
-    # recall_C0=0.659 → TP_C0=0.659, FP to leak = 0.341 → each ~0.171
-    r0=0.659
-    # From f1_C0=0.708 and r0=0.659: p0 = f1*r/(2*r-f1) = 0.708*0.659/(2*0.659-0.708)
-    p0=0.708*0.659/(2*0.659-0.708)
-    # C1 MDR share: assume MDR split ~equally
-    mdr_c1=0.102; mdr_c2=0.102
-    # recall_C1 = 1 - mdr_c1 = 0.898 (approx)
-    r1=1-mdr_c1
-    # from f1_C1=0.566: p1=f1*r1/(2*r1-f1)
-    p1=0.566*r1/(2*r1-0.566) if (2*r1-0.566)>0 else 0.5
-    r2=1-mdr_c2
-    p2=0.503*r2/(2*r2-0.503) if (2*r2-0.503)>0 else 0.4
-    # Build normalized 3x3: rows=true, cols=predicted
-    # Each row must sum to 1
-    row0=[r0, (1-r0)*0.5, (1-r0)*0.5]  # C0 misclassified equally to C1,C2
-    row1=[mdr_c1, r1*p1/(r1*p1+(1-r1-mdr_c1)*max(p2,0.01)+0.001),
-          1-mdr_c1-r1*p1/(r1*p1+(1-r1-mdr_c1)*max(p2,0.01)+0.001)]
-    row1=[mdr_c1, max(r1-0.05,0.4), 1-mdr_c1-max(r1-0.05,0.4)]
-    row2=[mdr_c2, max(1-mdr_c2-r2+0.05,0.1), max(r2-0.05,0.35)]
-    cm=np.array([row0,row1,row2],dtype=float)
-    cm=np.clip(cm,0,1)
-    cm=cm/cm.sum(axis=1,keepdims=True)  # renormalise rows
-    return cm
-
-# Try actual LOO pass; fall back to estimated
+# The matrix is computed from one LOCO pass (seed 42). There is no fallback:
+# without CatBoost, scikit-learn and the raw data the script stops.
 cm_norm = try_compute_confusion_matrix()
-used_actual = cm_norm is not None
 if cm_norm is None:
-    cm_norm = estimated_confusion_matrix()
-    print("    Using estimated confusion matrix (from aggregate metrics)")
-    print("    Run this script with CatBoost + raw data for exact matrix")
-else:
-    print(f"    Actual confusion matrix computed ✓")
+    sys.exit("ERROR: confusion matrix needs CatBoost, scikit-learn and the raw data "
+             "under LEAK_DATA_ROOT/Dynamic_pressure.")
+print(f"    Confusion matrix computed ✓")
+
+# Ten-seed summary for the annotation, read from the primary result file
+_c = pd.read_csv(need("03_condition_C_dual_9fold_PRIMARY.csv"))
+_c = _c[_c.Wk == 10].iloc[0]
 
 # Plot confusion matrix
 fig, ax = plt.subplots(figsize=(5.0, 4.2))
@@ -387,15 +364,15 @@ ax.set_xticklabels(CLASS_NAMES, fontsize=9)
 ax.set_yticklabels(CLASS_NAMES, fontsize=9)
 ax.set_xlabel("Predicted class")
 ax.set_ylabel("True class")
-note = "Actual" if used_actual else "Estimated from aggregate metrics"
 ax.set_title(f"Normalised confusion matrix — Condition C, $W_k$=10\n"
-             f"(LOCO, no $V_{{SL}}$/$V_{{SG}}$, 15 conditions, {note})")
+             f"(LOCO, no $V_{{SL}}$/$V_{{SG}}$, 15 conditions, seed 42)")
 plt.colorbar(im, ax=ax, label="Proportion", shrink=0.9)
 
-# Overlay accuracy / FAR / MDR
+# Overlay ten-seed accuracy / FAR / MDR
 ax.text(1.0, -0.18,
-        f"Accuracy 59.1 %   FAR 34.1 %   MDR 10.2 %\n"
-        f"Macro-F1 59.2 %   (mean ± std across 10 seeds)",
+        f"10-seed mean: Accuracy {_c.accuracy_mean*100:.1f} %   "
+        f"FAR {_c.FAR_mean*100:.1f} %   MDR {_c.MDR_mean*100:.1f} %\n"
+        f"Macro-F1 {_c.macro_f1_mean*100:.1f} %",
         transform=ax.transAxes, ha="right", va="top",
         fontsize=8.5, color="#444444",
         bbox=dict(boxstyle="round,pad=0.3", fc="#F5F5F0", ec="#CCCCCC"))
@@ -410,23 +387,36 @@ print(f"    Saved: {p2.name}  ✓")
 # ─────────────────────────────────────────────────────────────────────────────
 print("\n  Generating Figure 3 — All models comparison ...")
 
-MODELS_DATA = [
-    # (label, acc_mean, acc_std, far_mean, mdr_mean, highlight)
-    ("MS5  Single-stage CatBoost",  61.6, 0.7, 27.9, 10.3, False),
-    ("MC4  Cascade (primary ★)",    59.1, 0.6, 34.1, 10.2, True),
-    ("NN   MLP neural network",     58.4, 1.2, 16.4,  8.0, False),
-    ("MS2  SVM",                    57.9, 0.0, 29.4, 10.3, False),
-    ("MS6  Max-vote ensemble",      57.7, 1.0, 29.0,  9.8, False),
-    ("MS7  Stacking ensemble",      56.4, 1.2, 35.1, 15.8, False),
-    ("MS4  Random forest",          55.8, 0.6, 33.0, 14.4, False),
-    ("MS3  Decision tree",          53.8, 1.2, 40.6, 15.2, False),
-    ("MS1  $k$-NN",                 39.4, 0.0, 57.4, 17.7, False),
-]
+MODEL_LABELS = {
+    "MS5_CatBoost": "MS5  Single-stage CatBoost",
+    "MC4_Cascade":  "MC4  Cascade (primary ★)",
+    "NN_MLP":       "NN   MLP neural network",
+    "MS2_SVM":      "MS2  SVM",
+    "MS6_MaxVote":  "MS6  Max-vote ensemble",
+    "MS7_Stacking": "MS7  Stacking ensemble",
+    "MS4_RF":       "MS4  Random forest",
+    "MS3_DT":       "MS3  Decision tree",
+    "MS1_kNN":      "MS1  $k$-NN",
+}
+
+def _pm(s):
+    """Parse '61.6%±0.7%' into (61.6, 0.7)."""
+    a, b = str(s).replace("%", "").split("±")
+    return float(a), float(b)
+
+_am = pd.read_csv(need("07_all_models.csv"))
+MODELS_DATA = []   # (label, acc_mean, acc_std, highlight), best model first
+for _, r in _am.iterrows():
+    a, s = _pm(r["Accuracy"])
+    MODELS_DATA.append((MODEL_LABELS.get(r["Model"], r["Model"]), a, s,
+                        r["Model"].startswith("MC4")))
+MODELS_DATA.sort(key=lambda m: -m[1])
 
 labels   = [m[0] for m in MODELS_DATA]
 accs     = np.array([m[1] for m in MODELS_DATA])
 stds     = np.array([m[2] for m in MODELS_DATA])
-highl    = [m[5] for m in MODELS_DATA]
+highl    = [m[3] for m in MODELS_DATA]
+mc4_acc  = next(m[1] for m in MODELS_DATA if m[3])
 colors   = [COL["C"] if h else "#AAAAAA" for h in highl]
 
 fig, ax = plt.subplots(figsize=(7.0, 4.5))
@@ -442,22 +432,25 @@ for i, (a, s) in enumerate(zip(accs, stds)):
 ax.set_yticks(y)
 ax.set_yticklabels(labels, fontsize=9)
 ax.set_xlabel("Accuracy (%)")
-ax.set_xlim(25, 75)
-ax.axvline(59.1, color=COL["C"], lw=1.2, ls="--", alpha=0.6)
+ax.set_xlim(25, 92)
+ax.axvline(mc4_acc, color=COL["C"], lw=1.2, ls="--", alpha=0.6)
 ax.set_title("All classifiers under condition-blocked LOCO evaluation\n"
              "($W_k$=10, no $V_{SL}$/$V_{SG}$, POOL$_{{15}}$, 10 seeds; "
              "error bars: ±1 std)")
 
 # Range annotation
-ax.annotate("", xy=(61.6, 8.45), xytext=(39.4, 8.45),
+lo, hi = accs.min(), accs.max()
+ytop = len(labels) - 0.55
+ax.annotate("", xy=(hi, ytop), xytext=(lo, ytop),
             arrowprops=dict(arrowstyle="<->", color="#555555", lw=1.2))
-ax.text(50.5, 8.55, "39.4 – 61.6 %", ha="center", fontsize=8, color="#555555")
+ax.text((lo + hi) / 2, ytop + 0.1, f"{lo:.1f} – {hi:.1f} %",
+        ha="center", fontsize=8, color="#555555")
 
 legend_els = [
     mpatches.Patch(color=COL["C"], label="MC4 cascade (primary)"),
     mpatches.Patch(color="#AAAAAA", label="Comparison models"),
 ]
-ax.legend(handles=legend_els, loc="lower right", fontsize=8.5)
+ax.legend(handles=legend_els, loc="center right", fontsize=8.5)
 fig.tight_layout()
 p3 = FIG_DIR / "Fig3_AllModels_Comparison.png"
 fig.savefig(p3, dpi=300, bbox_inches="tight")
@@ -469,15 +462,15 @@ print(f"    Saved: {p3.name}  ✓")
 # ─────────────────────────────────────────────────────────────────────────────
 print("\n  Generating Figure 4 — Noise robustness ...")
 
-# Verified noise data from 08_noise_robustness.csv (terminal output)
+_nz = pd.read_csv(need("08_noise_robustness.csv")).sort_values("Noise_pct_FSO")
 NOISE = {
-    "pct":  [0.0,  0.1,  0.2,  0.5,  1.0],
-    "acc":  [59.1, 58.5, 58.9, 59.0, 59.0],
-    "astd": [ 0.6,  0.8,  1.1,  0.7,  0.4],
-    "far":  [34.1, 31.9, 31.1, 30.4, 29.8],
-    "fstd": [ 1.0,  1.0,  1.7,  0.9,  0.8],
-    "mdr":  [10.2, 10.6, 10.5, 10.5, 10.1],
-    "mstd": [ 0.4,  0.5,  0.4,  0.3,  0.4],
+    "pct":  _nz.Noise_pct_FSO.tolist(),
+    "acc":  (_nz.Acc_mean * 100).tolist(),
+    "astd": (_nz.Acc_std * 100).tolist(),
+    "far":  (_nz.FAR_mean * 100).tolist(),
+    "fstd": (_nz.FAR_std * 100).tolist(),
+    "mdr":  (_nz.MDR_mean * 100).tolist(),
+    "mstd": (_nz.MDR_std * 100).tolist(),
 }
 pct = NOISE["pct"]
 
@@ -492,7 +485,7 @@ ax1.set_ylabel("Accuracy (%)")
 ax1.set_ylim(50, 70)
 ax1.set_title("Accuracy vs. noise level")
 ax1.annotate("Performance floor\nset by LOCO, not noise",
-             xy=(0.5, 59.0), xytext=(0.55, 64.5),
+             xy=(pct[-2], NOISE["acc"][-2]), xytext=(0.55, 64.5),
              fontsize=8, color="#444444",
              arrowprops=dict(arrowstyle="->", color="#444444", lw=0.9))
 
@@ -507,8 +500,8 @@ ax2.set_xlabel("Noise level (% FSO)")
 ax2.set_ylabel("Rate (%)")
 ax2.set_ylim(0, 45)
 ax2.set_title("FAR and MDR vs. noise level")
-ax2.legend(fontsize=8.5, loc="upper right")
-ax2.annotate("FAR decreases\nwith noise", xy=(0.9, 30.0),
+ax2.legend(fontsize=8.5, loc="center right")
+ax2.annotate("FAR decreases\nwith noise", xy=(pct[-1], NOISE["far"][-1]),
              xytext=(0.5, 38), fontsize=8, color="#993C1D",
              arrowprops=dict(arrowstyle="->", color="#993C1D", lw=0.9))
 
@@ -523,7 +516,7 @@ fig.tight_layout(rect=[0, 0, 1, 0.92])
 p4 = FIG_DIR / "Fig4_Noise_Robustness.png"
 fig.savefig(p4, dpi=300, bbox_inches="tight")
 plt.close(fig)
-print(f"    Saved: {p4.name}  ✓  0% FSO: 59.1% acc, 34.1% FAR (not 63.6%/6.4%)")
+print(f"    Saved: {p4.name}  ✓  0% FSO: {NOISE['acc'][0]:.1f}% acc, {NOISE['far'][0]:.1f}% FAR")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SUMMARY

@@ -58,6 +58,14 @@ python scripts/external_validation_gpla12.py      # GPLA-12
 
 On Windows, set `PYTHONIOENCODING=utf-8` so the progress output prints. The full pipeline takes several hours on a CPU.
 
+Run the experiment scripts before `paper1_generate_figures.py`. It reads every plotted value from the result files they write, and stops if a file is missing. The confusion matrix comes from one LOCO pass with seed 42.
+
+`requirements.txt` pins the tested versions (Python 3.11.3). CatBoost runs on the GPU when PyTorch finds CUDA. GPU and CPU runs can differ slightly in the last digit.
+
+## Citation
+
+See `CITATION.cff`, or use "Cite this repository" on GitHub.
+
 ## License
 
 MIT, see `LICENSE`.
